@@ -1,0 +1,142 @@
+x-app: &app
+  build: .
+  image: rutasur-app
+  restart: unless-stopped
+  depends_on:
+    kafka-init:
+      condition: service_completed_successfully
+    mongo:
+      condition: service_healthy
+
+x-env: &env
+  KAFKA_BROKERS: kafka:9092
+  MONGO_URI: mongodb://mongo:27017/?directConnection=true
+  KAFKAJS_NO_PARTITIONER_WARNING: "1"
+
+services:
+  kafka:
+    image: apache/kafka:3.8.0
+    container_name: rutasur-kafka
+    ports:
+      - "9094:9094" # para los scripts que corren en tu máquina
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:9094
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:9094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+
+  kafka-init:
+    image: apache/kafka:3.8.0
+    container_name: rutasur-kafka-init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    volumes:
+      - ./infra/create-topics.sh:/create-topics.sh:ro
+    entrypoint: ["/bin/bash", "/create-topics.sh"]
+    restart: "no"
+
+  mongo:
+    image: mongo:7
+    container_name: rutasur-mongo
+    command: ["--replSet", "rs0", "--bind_ip_all"]
+    ports:
+      - "27018:27017"
+    healthcheck:
+      # inicia el replica set si no existe y solo da "healthy" cuando ya es primario
+      test:
+        - CMD
+        - mongosh
+        - --quiet
+        - --eval
+        - "try { if (rs.status().myState === 1) quit(0); quit(1) } catch (e) { rs.initiate({_id:'rs0',members:[{_id:0,host:'localhost:27017'}]}); quit(1) }"
+      interval: 5s
+      timeout: 10s
+      retries: 30
+    volumes:
+      - mongo-data:/data/db
+
+  simulador:
+    <<: *app
+    container_name: rutasur-simulador
+    working_dir: /app/simulador
+    command: ["../node_modules/.bin/tsx", "src/index.ts"]
+    environment: *env
+    ports:
+      - "4001:4001"
+
+  proyector:
+    <<: *app
+    container_name: rutasur-proyector
+    working_dir: /app/proyector
+    command: ["../node_modules/.bin/tsx", "src/index.ts"]
+    environment: *env
+
+  notificaciones:
+    <<: *app
+    container_name: rutasur-notificaciones
+    working_dir: /app/notificaciones
+    command: ["../node_modules/.bin/tsx", "src/index.ts"]
+    environment: *env
+
+  reprogramacion:
+    <<: *app
+    container_name: rutasur-reprogramacion
+    working_dir: /app/reprogramacion
+    command: ["../node_modules/.bin/tsx", "src/index.ts"]
+    environment: *env
+
+  analitica:
+    <<: *app
+    container_name: rutasur-analitica
+    working_dir: /app/analitica
+    command: ["../node_modules/.bin/tsx", "src/index.ts"]
+    environment: *env
+
+  monitor-sla:
+    <<: *app
+    container_name: rutasur-monitor-sla
+    working_dir: /app/monitor-sla
+    command: ["../node_modules/.bin/tsx", "src/index.ts"]
+    environment: *env
+
+  # 4º indicador (reprocesamiento): no arranca solo, se activa en la demo con
+  #   docker compose up -d tiempo-hub
+  tiempo-hub:
+    <<: *app
+    container_name: rutasur-tiempo-hub
+    profiles: ["demo"]
+    working_dir: /app/tiempo-hub
+    command: ["../node_modules/.bin/tsx", "src/index.ts"]
+    environment: *env
+
+  web:
+    <<: *app
+    container_name: rutasur-web
+    working_dir: /app/web
+    command: ["../node_modules/.bin/next", "dev", "-H", "0.0.0.0", "-p", "3000"]
+    environment:
+      <<: *env
+      SIM_URL: http://simulador:4001
+      NEXT_TELEMETRY_DISABLED: "1"
+    ports:
+      - "3000:3000"
+
+volumes:
+  kafka-data:
+  mongo-data:

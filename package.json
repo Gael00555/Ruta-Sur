@@ -1,0 +1,30 @@
+{
+  "name": "rutasur",
+  "private": true,
+  "type": "module",
+  "workspaces": ["shared", "simulador", "proyector", "notificaciones", "reprogramacion", "analitica", "monitor-sla", "web", "tiempo-hub"],
+  "scripts": {
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "smoke": "tsx shared/scripts/smoke.ts",
+     "infra": "docker compose up -d kafka kafka-init mongo",
+    "esperar": "tsx shared/scripts/esperar.ts",
+    "servicios": "concurrently -n sim,proy,notif,repr,anal,sla,web \"npm run dev -w simulador\" \"npm run dev -w proyector\" \"npm run dev -w notificaciones\" \"npm run dev -w reprogramacion\" \"npm run dev -w analitica\" \"npm run dev -w monitor-sla\" \"npm run dev -w web\"",
+    "servicios:sin-notif": "concurrently -n sim,proy,repr,anal,sla,web \"npm run dev -w simulador\" \"npm run dev -w proyector\" \"npm run dev -w reprogramacion\" \"npm run dev -w analitica\" \"npm run dev -w monitor-sla\" \"npm run dev -w web\"",
+    "servicios:sin-sim": "concurrently -n proy,notif,repr,anal,sla,web \"npm run dev -w proyector\" \"npm run dev -w notificaciones\" \"npm run dev -w reprogramacion\" \"npm run dev -w analitica\" \"npm run dev -w monitor-sla\" \"npm run dev -w web\"",
+    "start": "docker compose up -d --build",
+    "start:sin-notif": "npm run infra && npm run esperar && npm run servicios:sin-notif",
+    "start:sin-sim": "npm run infra && npm run esperar && npm run servicios:sin-sim",
+    "reset": "docker compose down -v && docker compose up -d --build",
+    "verificar": "tsx shared/scripts/verificar.ts",
+    "snapshot": "tsx shared/scripts/snapshot.ts",
+    "replay:proyector": "tsx shared/scripts/replay-proyector.ts",
+    "stop": "docker compose down",
+    "logs": "docker compose logs -f --tail=30"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "concurrently": "^9.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}

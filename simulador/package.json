@@ -1,0 +1,11 @@
+{
+  "name": "@rutasur/simulador",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "typecheck": "tsc -p . --noEmit"
+  },
+  "dependencies": { "@rutasur/shared": "*" }
+}
